@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+db/inventory.db
+inventory.log
+*.png
+products_export.csv
+products_export.json
