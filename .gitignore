@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 db/inventory.db
 inventory.log
-*.png
+chart_stock_value.png
+chart_reorder.png
 products_export.csv
 products_export.json
