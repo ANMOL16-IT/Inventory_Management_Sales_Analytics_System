@@ -46,7 +46,35 @@ def init_db():
 
 
 # ---------------------- CREATE ----------------------
+def get_product_by_name(name):
+    """Case-insensitive exact-name lookup, used to detect duplicates."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM products WHERE LOWER(name) = LOWER(?)", (name,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def add_product(name, price, quantity, reorder_level=5, expiry_date=None):
+    """
+    Add a product. If a product with the same name already exists,
+    this ADDS the new quantity to the existing stock instead of creating
+    a duplicate row (price and reorder level are also updated to the
+    latest values given).
+    """
+    existing = get_product_by_name(name)
+    if existing:
+        conn = get_connection()
+        conn.execute(
+            "UPDATE products SET quantity = quantity + ?, price = ?, reorder_level = ? "
+            "WHERE product_id = ?",
+            (quantity, price, reorder_level, existing["product_id"]),
+        )
+        conn.commit()
+        conn.close()
+        return existing["product_id"]
+
     conn = get_connection()
     cur = conn.execute(
         """INSERT INTO products (name, price, quantity, reorder_level, expiry_date)

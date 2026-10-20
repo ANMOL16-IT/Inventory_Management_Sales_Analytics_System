@@ -15,7 +15,7 @@ from tkinter import ttk, messagebox
 
 from db.database import (
     init_db, add_product, get_all_products, update_product,
-    delete_product, record_sale, get_all_sales,
+    delete_product, record_sale, get_all_sales, get_product_by_name,
 )
 from data_handling.data_tools import inventory_summary, export_products_csv, export_products_json
 from analytics.charts import plot_stock_value_by_product, plot_quantity_vs_reorder_level, get_reorder_alerts
@@ -94,19 +94,32 @@ class ProductsTab(ttk.Frame):
         ttk.Button(form, text="Add Product", style="Primary.TButton",
                    command=self.add_product).grid(row=0, column=8, padx=(6, 0))
 
-        columns = ("id", "name", "price", "qty", "reorder")
+        columns = ("id", "name", "price", "qty", "reorder", "status")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=14)
         for col, label, width in [
-            ("id", "ID", 50), ("name", "Name", 220), ("price", "Price", 100),
-            ("qty", "Quantity", 100), ("reorder", "Reorder Level", 110),
+            ("id", "ID", 50), ("name", "Name", 200), ("price", "Price", 90),
+            ("qty", "Quantity", 90), ("reorder", "Reorder Level", 100),
+            ("status", "Status", 110),
         ]:
             self.tree.heading(col, text=label)
             self.tree.column(col, width=width, anchor="center" if col != "name" else "w")
+
+        # Row colour tags: red for out of stock, orange/yellow for low stock.
+        self.tree.tag_configure("out_of_stock", background="#F8D7DA", foreground="#842029")
+        self.tree.tag_configure("low_stock", background="#FFF3CD", foreground="#856404")
+
         self.tree.grid(row=2, column=0, sticky="nsew", padx=14, pady=10)
         self.rowconfigure(2, weight=1)
 
+        legend = ttk.Frame(self)
+        legend.grid(row=3, column=0, sticky="w", padx=14, pady=(0, 6))
+        tk.Label(legend, text="  ", bg="#FFF3CD").pack(side="left")
+        ttk.Label(legend, text="Low stock   ").pack(side="left")
+        tk.Label(legend, text="  ", bg="#F8D7DA").pack(side="left")
+        ttk.Label(legend, text="Out of stock").pack(side="left")
+
         btns = ttk.Frame(self)
-        btns.grid(row=3, column=0, sticky="w", padx=14, pady=(0, 14))
+        btns.grid(row=4, column=0, sticky="w", padx=14, pady=(0, 14))
         ttk.Button(btns, text="Delete Selected", command=self.delete_selected).pack(side="left")
 
         self.refresh()
@@ -119,9 +132,19 @@ class ProductsTab(ttk.Frame):
             reorder = int(self.reorder_var.get() or 5)
             if not name:
                 raise ValueError("Name cannot be empty.")
+
+            existing = get_product_by_name(name)
             add_product(name=name, price=price, quantity=qty, reorder_level=reorder)
             self.name_var.set(""); self.price_var.set(""); self.qty_var.set("")
             self.refresh()
+
+            if existing:
+                new_qty = existing["quantity"] + qty
+                messagebox.showinfo(
+                    "Stock updated",
+                    f"'{name}' already existed — added {qty} to existing stock.\n"
+                    f"New quantity: {new_qty}",
+                )
         except ValueError as e:
             messagebox.showerror("Invalid input", str(e))
 
@@ -137,8 +160,16 @@ class ProductsTab(ttk.Frame):
         for row in self.tree.get_children():
             self.tree.delete(row)
         for p in get_all_products():
+            if p["quantity"] <= 0:
+                status, tag = "Out of stock", "out_of_stock"
+            elif p["quantity"] <= p["reorder_level"]:
+                status, tag = "Low stock", "low_stock"
+            else:
+                status, tag = "OK", ""
             self.tree.insert("", "end", values=(
-                p["product_id"], p["name"], f"{p['price']:.2f}", p["quantity"], p["reorder_level"]))
+                p["product_id"], p["name"], f"{p['price']:.2f}",
+                p["quantity"], p["reorder_level"], status,
+            ), tags=(tag,) if tag else ())
 
 
 class SalesTab(ttk.Frame):
